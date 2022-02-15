@@ -1,0 +1,23 @@
+version: '3.8'
+networks:
+  my-bridge:
+    external:
+      name: my-bridge
+services:
+  clash-aggregation:
+    build: .
+    image: ixuewen/clash-aggregation
+    container_name: clash-aggregation-docker
+    restart: always
+    networks:
+      - my-bridge
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+    environment:
+      - PORT=${CLASH_AGGREGATION_PORT}
+      - CONTEXT_PATH=${CLASH_AGGREGATION_CONTEXT_PATH}
+      - CORS_ORIGIN=${CLASH_AGGREGATION_CORS_ORIGIN}
+      - MYSQL_HOST=${CLASH_AGGREGATION_MYSQL_HOST}
+      - MYSQL_USER=${CLASH_AGGREGATION_MYSQL_USER}
+      - MYSQL_PASSWORD=${CLASH_AGGREGATION_MYSQL_PASSWORD}
+      - MYSQL_DATABASE=${CLASH_AGGREGATION_MYSQL_DATABASE}
