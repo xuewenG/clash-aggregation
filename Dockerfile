@@ -1,28 +1,28 @@
-FROM node:12.17.0-stretch AS BUILDER
+FROM node:16.14.0-stretch AS BUILDER
 LABEL maintainer="xuewenG" \
-    site="https://github.com/xuewenG/clash-aggregation"
+        site="https://github.com/xuewenG/clash-aggregation"
 
 ENV MY_HOME=/root
 RUN mkdir -p $MY_HOME
 WORKDIR $MY_HOME
 
 COPY package.json $MY_HOME
-RUN set -x &&
-    yarn install
+RUN set -x \
+    && yarn install
 
 COPY . $MY_HOME
-RUN set -x &&
-    yarn run build
+RUN set -x \
+    && yarn run build
 
-FROM node:12.17.0-stretch
+FROM node:16.14.0-stretch
 
 ENV MY_HOME=/root
 RUN mkdir -p $MY_HOME
 WORKDIR $MY_HOME
 
 COPY package.json $MY_HOME
-RUN set -x &&
-    yarn install --production
+RUN set -x \
+    && yarn install --production
 
 COPY --from=BUILDER /root/dist .
 
