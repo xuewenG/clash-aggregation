@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@ixuewen/express-util": "^1.0.3",
-    "@ixuewen/mysql-util": "^1.0.2",
+    "@ixuewen/mysql-util": "^1.0.3",
     "express": "^4.17.2",
     "node-fetch": "^2.6.7",
     "reflect-metadata": "^0.1.13",
@@ -17,7 +17,7 @@
   },
   "devDependencies": {
     "@types/express": "^4.17.13",
-    "@types/node-fetch": "^2.6.0",
+    "@types/node-fetch": "^2.6.1",
     "@typescript-eslint/eslint-plugin": "^5.12.0",
     "@typescript-eslint/parser": "^5.12.0",
     "eslint": "^7.32.0",
