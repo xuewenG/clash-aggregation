@@ -4,14 +4,22 @@ import { Request, Response } from 'express'
 import fetch from 'node-fetch'
 import YAML from 'yaml'
 
-enum ProxyType {
+type ProxyServerName = string
+
+enum ProxyServerType {
   VMESS = 'vmess',
   SS = 'ss'
 }
 
-interface Proxy {
-  name: string
-  type: ProxyType
+interface ProxyServer {
+  name: ProxyServerName
+  type: ProxyServerType
+}
+
+enum ProxyGroupName {
+  CURRENT_GROUP = '当前策略',
+  AUTO_SELECT = '自动选择',
+  MANUALLY_SELECT = '手动选择'
 }
 
 enum ProxyGroupType {
@@ -20,9 +28,9 @@ enum ProxyGroupType {
 }
 
 interface ProxyGroup {
-  name: string
+  name: ProxyGroupName
   type: ProxyGroupType
-  proxies: string[]
+  proxies: ProxyPolicy[]
 }
 
 interface AutoSelectProxyGroup extends ProxyGroup {
@@ -31,10 +39,17 @@ interface AutoSelectProxyGroup extends ProxyGroup {
   tolerance: number
 }
 
+enum SpecialProxyPolicy {
+  DIRECT = 'DIRECT',
+  REJECT = 'REJECT'
+}
+
+type ProxyPolicy = ProxyServerName | ProxyGroupName | SpecialProxyPolicy
+
 type Rules = string[]
 
 interface ApiJson {
-  proxies: Proxy[]
+  proxies: ProxyServer[]
   rules: Rules
 }
 
@@ -49,15 +64,12 @@ interface Subscribe {
 }
 
 const getSubscribeList = async (): Promise<Subscribe[]> => {
-  const subscribeList: Subscribe[] = await queryList(
-    'select * from subscribe',
-    {}
-  )
+  const subscribeList: Subscribe[] = await queryList('select * from subscribe')
   return subscribeList
 }
 
 const getUserList = async (): Promise<User[]> => {
-  const userList: User[] = await queryList('select * from user', {})
+  const userList: User[] = await queryList('select * from user')
   return userList
 }
 
@@ -93,29 +105,26 @@ const getApiJsonList = async (): Promise<ApiJson[]> => {
   return apiJsonList
 }
 
-const getProxyList = (apiJsonList: ApiJson[]): Proxy[] => {
+const getProxyList = (apiJsonList: ApiJson[]): ProxyServer[] => {
   return apiJsonList
     .map(apiJson => apiJson.proxies)
     .flat(1)
-    .filter(proxy => proxy.type === ProxyType.VMESS)
+    .filter(proxy => proxy.type === ProxyServerType.VMESS)
 }
 
-const getProxyGroupList = (proxyList: Proxy[]): ProxyGroup[] => {
-  const DIRECT_PROXY_NAME = 'DIRECT'
-  const AUTO_SELECT_GROUP_NAME = '自动选择'
-
-  const proxySelect: ProxyGroup = {
-    name: '节点选择',
+const getProxyGroupList = (proxyList: ProxyServer[]): ProxyGroup[] => {
+  const currentGroup: ProxyGroup = {
+    name: ProxyGroupName.CURRENT_GROUP,
     type: ProxyGroupType.SELECT,
     proxies: [
-      AUTO_SELECT_GROUP_NAME,
-      DIRECT_PROXY_NAME,
-      ...proxyList.map(proxy => proxy.name)
+      ProxyGroupName.AUTO_SELECT,
+      ProxyGroupName.MANUALLY_SELECT,
+      SpecialProxyPolicy.DIRECT
     ]
   }
 
   const autoSelect: AutoSelectProxyGroup = {
-    name: AUTO_SELECT_GROUP_NAME,
+    name: ProxyGroupName.AUTO_SELECT,
     type: ProxyGroupType.URL_TEST,
     proxies: proxyList.map(proxy => proxy.name),
     url: 'https://www.gstatic.com/generate_204',
@@ -123,27 +132,33 @@ const getProxyGroupList = (proxyList: Proxy[]): ProxyGroup[] => {
     tolerance: 10000
   }
 
-  return [proxySelect, autoSelect]
+  const manuallySelect: ProxyGroup = {
+    name: ProxyGroupName.MANUALLY_SELECT,
+    type: ProxyGroupType.SELECT,
+    proxies: proxyList.map(proxy => proxy.name)
+  }
+
+  return [currentGroup, autoSelect, manuallySelect]
 }
 
 const getRuleList = (): Rules => {
   return [
-    'DOMAIN-SUFFIX,ip6-localhost,DIRECT',
-    'DOMAIN-SUFFIX,ip6-loopback,DIRECT',
-    'DOMAIN-SUFFIX,local,DIRECT',
-    'DOMAIN-SUFFIX,localhost,DIRECT',
-    'IP-CIDR,10.0.0.0/8,DIRECT,no-resolve',
-    'IP-CIDR,100.64.0.0/10,DIRECT,no-resolve',
-    'IP-CIDR,127.0.0.0/8,DIRECT,no-resolve',
-    'IP-CIDR,172.16.0.0/12,DIRECT,no-resolve',
-    'IP-CIDR,192.168.0.0/16,DIRECT,no-resolve',
-    'IP-CIDR,198.18.0.0/16,DIRECT,no-resolve',
-    'IP-CIDR6,::1/128,DIRECT,no-resolve',
-    'IP-CIDR6,fc00::/7,DIRECT,no-resolve',
-    'IP-CIDR6,fe80::/10,DIRECT,no-resolve',
-    'IP-CIDR6,fd00::/8,DIRECT,no-resolve',
-    'GEOIP,CN,DIRECT',
-    'MATCH,节点选择'
+    `DOMAIN-SUFFIX,ip6-localhost,${SpecialProxyPolicy.DIRECT}`,
+    `DOMAIN-SUFFIX,ip6-loopback,${SpecialProxyPolicy.DIRECT}`,
+    `DOMAIN-SUFFIX,local,${SpecialProxyPolicy.DIRECT}`,
+    `DOMAIN-SUFFIX,localhost,${SpecialProxyPolicy.DIRECT}`,
+    `IP-CIDR,10.0.0.0/8,${SpecialProxyPolicy.DIRECT},no-resolve`,
+    `IP-CIDR,100.64.0.0/10,${SpecialProxyPolicy.DIRECT},no-resolve`,
+    `IP-CIDR,127.0.0.0/8,${SpecialProxyPolicy.DIRECT},no-resolve`,
+    `IP-CIDR,172.16.0.0/12,${SpecialProxyPolicy.DIRECT},no-resolve`,
+    `IP-CIDR,192.168.0.0/16,${SpecialProxyPolicy.DIRECT},no-resolve`,
+    `IP-CIDR,198.18.0.0/16,${SpecialProxyPolicy.DIRECT},no-resolve`,
+    `IP-CIDR6,::1/128,${SpecialProxyPolicy.DIRECT},no-resolve`,
+    `IP-CIDR6,fc00::/7,${SpecialProxyPolicy.DIRECT},no-resolve`,
+    `IP-CIDR6,fe80::/10,${SpecialProxyPolicy.DIRECT},no-resolve`,
+    `IP-CIDR6,fd00::/8,${SpecialProxyPolicy.DIRECT},no-resolve`,
+    `GEOIP,CN,${SpecialProxyPolicy.DIRECT}`,
+    `MATCH,${ProxyGroupName.CURRENT_GROUP}`
   ]
 }
 
