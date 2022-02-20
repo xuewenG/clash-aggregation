@@ -6,20 +6,20 @@ import YAML from 'yaml'
 
 type ProxyServerName = string
 
-enum ProxyServerType {
-  VMESS = 'vmess',
-  SS = 'ss'
-}
-
-interface ProxyServer {
-  name: ProxyServerName
-  type: ProxyServerType
-}
-
 enum ProxyGroupName {
   CURRENT_GROUP = '当前策略',
   AUTO_SELECT = '自动选择',
   MANUALLY_SELECT = '手动选择'
+}
+
+enum SpecialProxyName {
+  DIRECT = 'DIRECT',
+  REJECT = 'REJECT'
+}
+
+enum ProxyServerType {
+  VMESS = 'vmess',
+  SS = 'ss'
 }
 
 enum ProxyGroupType {
@@ -27,6 +27,12 @@ enum ProxyGroupType {
   URL_TEST = 'url-test'
 }
 
+type ProxyPolicy = ProxyServerName | ProxyGroupName | SpecialProxyName
+
+interface ProxyServer {
+  name: ProxyServerName
+  type: ProxyServerType
+}
 interface ProxyGroup {
   name: ProxyGroupName
   type: ProxyGroupType
@@ -38,13 +44,6 @@ interface AutoSelectProxyGroup extends ProxyGroup {
   interval: number
   tolerance: number
 }
-
-enum SpecialProxyPolicy {
-  DIRECT = 'DIRECT',
-  REJECT = 'REJECT'
-}
-
-type ProxyPolicy = ProxyServerName | ProxyGroupName | SpecialProxyPolicy
 
 type Rules = string[]
 
@@ -119,7 +118,7 @@ const getProxyGroupList = (proxyList: ProxyServer[]): ProxyGroup[] => {
     proxies: [
       ProxyGroupName.AUTO_SELECT,
       ProxyGroupName.MANUALLY_SELECT,
-      SpecialProxyPolicy.DIRECT
+      SpecialProxyName.DIRECT
     ]
   }
 
@@ -127,9 +126,9 @@ const getProxyGroupList = (proxyList: ProxyServer[]): ProxyGroup[] => {
     name: ProxyGroupName.AUTO_SELECT,
     type: ProxyGroupType.URL_TEST,
     proxies: proxyList.map(proxy => proxy.name),
-    url: 'https://www.gstatic.com/generate_204',
-    interval: 30000,
-    tolerance: 10000
+    interval: 1200,
+    tolerance: 3,
+    url: 'https://www.gstatic.com/generate_204'
   }
 
   const manuallySelect: ProxyGroup = {
@@ -143,21 +142,21 @@ const getProxyGroupList = (proxyList: ProxyServer[]): ProxyGroup[] => {
 
 const getRuleList = (): Rules => {
   return [
-    `DOMAIN-SUFFIX,ip6-localhost,${SpecialProxyPolicy.DIRECT}`,
-    `DOMAIN-SUFFIX,ip6-loopback,${SpecialProxyPolicy.DIRECT}`,
-    `DOMAIN-SUFFIX,local,${SpecialProxyPolicy.DIRECT}`,
-    `DOMAIN-SUFFIX,localhost,${SpecialProxyPolicy.DIRECT}`,
-    `IP-CIDR,10.0.0.0/8,${SpecialProxyPolicy.DIRECT},no-resolve`,
-    `IP-CIDR,100.64.0.0/10,${SpecialProxyPolicy.DIRECT},no-resolve`,
-    `IP-CIDR,127.0.0.0/8,${SpecialProxyPolicy.DIRECT},no-resolve`,
-    `IP-CIDR,172.16.0.0/12,${SpecialProxyPolicy.DIRECT},no-resolve`,
-    `IP-CIDR,192.168.0.0/16,${SpecialProxyPolicy.DIRECT},no-resolve`,
-    `IP-CIDR,198.18.0.0/16,${SpecialProxyPolicy.DIRECT},no-resolve`,
-    `IP-CIDR6,::1/128,${SpecialProxyPolicy.DIRECT},no-resolve`,
-    `IP-CIDR6,fc00::/7,${SpecialProxyPolicy.DIRECT},no-resolve`,
-    `IP-CIDR6,fe80::/10,${SpecialProxyPolicy.DIRECT},no-resolve`,
-    `IP-CIDR6,fd00::/8,${SpecialProxyPolicy.DIRECT},no-resolve`,
-    `GEOIP,CN,${SpecialProxyPolicy.DIRECT}`,
+    `DOMAIN-SUFFIX,local,${SpecialProxyName.DIRECT}`,
+    `DOMAIN-SUFFIX,localhost,${SpecialProxyName.DIRECT}`,
+    `DOMAIN-SUFFIX,ip6-localhost,${SpecialProxyName.DIRECT}`,
+    `DOMAIN-SUFFIX,ip6-loopback,${SpecialProxyName.DIRECT}`,
+    `IP-CIDR,10.0.0.0/8,${SpecialProxyName.DIRECT},no-resolve`,
+    `IP-CIDR,100.64.0.0/10,${SpecialProxyName.DIRECT},no-resolve`,
+    `IP-CIDR,127.0.0.0/8,${SpecialProxyName.DIRECT},no-resolve`,
+    `IP-CIDR,172.16.0.0/12,${SpecialProxyName.DIRECT},no-resolve`,
+    `IP-CIDR,192.168.0.0/16,${SpecialProxyName.DIRECT},no-resolve`,
+    `IP-CIDR,198.18.0.0/16,${SpecialProxyName.DIRECT},no-resolve`,
+    `IP-CIDR6,::1/128,${SpecialProxyName.DIRECT},no-resolve`,
+    `IP-CIDR6,fc00::/7,${SpecialProxyName.DIRECT},no-resolve`,
+    `IP-CIDR6,fe80::/10,${SpecialProxyName.DIRECT},no-resolve`,
+    `IP-CIDR6,fd00::/8,${SpecialProxyName.DIRECT},no-resolve`,
+    `GEOIP,CN,${SpecialProxyName.DIRECT}`,
     `MATCH,${ProxyGroupName.CURRENT_GROUP}`
   ]
 }
@@ -170,7 +169,7 @@ export class SubscribeController {
     const userList = await getUserList()
     const currentUser = userList.find(user => user.token === token)
     if (!token || !currentUser) {
-      resp.write(
+      resp.send(
         YAML.stringify({
           ...getBaseConfig(),
           proxies: [],
@@ -191,7 +190,7 @@ export class SubscribeController {
       'proxy-groups': proxyGroupList,
       rules
     }
-    resp.write(YAML.stringify(result))
+    resp.send(YAML.stringify(result))
     resp.end()
   }
 }

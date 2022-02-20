@@ -8,7 +8,7 @@ WORKDIR $MY_HOME
 
 COPY package.json $MY_HOME
 RUN set -x \
-    && yarn install
+    && yarn install --registry=https://registry.npmmirror.com
 
 COPY . $MY_HOME
 RUN set -x \
@@ -22,7 +22,7 @@ WORKDIR $MY_HOME
 
 COPY package.json $MY_HOME
 RUN set -x \
-    && yarn install --production
+    && yarn install --production --registry=https://registry.npmmirror.com
 
 COPY --from=BUILDER /root/dist .
 
