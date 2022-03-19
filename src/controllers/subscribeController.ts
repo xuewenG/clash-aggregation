@@ -4,6 +4,17 @@ import { Request, Response } from 'express'
 import fetch from 'node-fetch'
 import YAML from 'yaml'
 
+interface BaseConfig {
+  port: number
+  'socks-port': number
+  'mixed-port': number
+  'allow-lan': boolean
+  mode: 'global' | 'rule'
+  'log-level': 'debug' | 'info'
+  ipv6: boolean
+  'external-controller': string
+}
+
 type ProxyServerName = string
 
 enum ProxyGroupName {
@@ -65,22 +76,30 @@ interface Subscribe {
 }
 
 const getSubscribeList = async (userId: number): Promise<Subscribe[]> => {
-  const subscribeList: Subscribe[] = await queryList(
-    `SELECT * 
+  try {
+    return await queryList(
+      `SELECT * 
       FROM subscribe 
       WHERE
         id IN ( SELECT subscribeId AS id FROM userSubscribe WHERE userId = ? );`,
-    userId
-  )
-  return subscribeList
+      userId
+    )
+  } catch (err) {
+    console.error(err)
+  }
+  return Promise.resolve([])
 }
 
 const getUserList = async (): Promise<User[]> => {
-  const userList: User[] = await queryList('select * from user')
-  return userList
+  try {
+    return await queryList('select * from user')
+  } catch (err) {
+    console.error(err)
+  }
+  return Promise.resolve([])
 }
 
-const getBaseConfig = () => {
+const getBaseConfig = (): BaseConfig => {
   return {
     port: 10808,
     'socks-port': 10809,
@@ -103,14 +122,17 @@ const getApiJsonList = async (userId: number): Promise<ApiJson[]> => {
         'user-agent': 'ClashX/1.20.4.1'
       },
       method: 'GET'
+    }).catch(err => {
+      console.error(err)
+      return null
     })
   )
-  const apiContentList = (await Promise.all(apiRequestList)).map(request =>
-    request.text()
+  const apiContentList = (await Promise.all(apiRequestList)).map(
+    request => (request && request.text()) || ''
   )
-  const apiJsonList: ApiJson[] = (await Promise.all(apiContentList)).map(
-    content => YAML.parse(content)
-  )
+  const apiJsonList: ApiJson[] = (await Promise.all(apiContentList))
+    .map(content => YAML.parse(content))
+    .filter(json => json)
   return apiJsonList
 }
 
@@ -171,36 +193,46 @@ const getRuleList = (): Rules => {
   ]
 }
 
+type GetSubscribeResult = {
+  proxies: ProxyServer[]
+  'proxy-groups': ProxyGroup[]
+  rules: string[]
+} & BaseConfig
+
 @Controller('/subscribe')
 export class SubscribeController {
   @All('/get')
   async getSubscribe(req: Request, resp: Response) {
+    resp.setHeader('Content-Type', 'text/plain; charset=utf-8')
+    const result: GetSubscribeResult = {
+      ...getBaseConfig(),
+      proxies: [],
+      'proxy-groups': [],
+      rules: []
+    }
+
     const token = req.query.token
-    const userList = await getUserList()
-    const currentUser = userList.find(user => user.token === token)
-    if (!token || !currentUser) {
-      resp.send(
-        YAML.stringify({
-          ...getBaseConfig(),
-          proxies: [],
-          'proxy-groups': [],
-          rules: []
-        })
-      )
-      resp.end()
+    if (!token) {
+      resp.end(YAML.stringify(result), 'utf-8')
       return
     }
+
+    const userList = await getUserList()
+    const currentUser = userList.find(user => user.token === token)
+    if (!currentUser) {
+      resp.end(YAML.stringify(result), 'utf-8')
+      return
+    }
+
     const apiJsonList = await getApiJsonList(currentUser.id)
     const proxyList = getProxyList(apiJsonList)
     const proxyGroupList = getProxyGroupList(proxyList)
     const rules = getRuleList()
-    const result = {
-      ...getBaseConfig(),
-      proxies: proxyList,
-      'proxy-groups': proxyGroupList,
-      rules
-    }
-    resp.send(YAML.stringify(result))
-    resp.end()
+
+    result.proxies = proxyList
+    result['proxy-groups'] = proxyGroupList
+    result.rules = rules
+
+    resp.end(YAML.stringify(result), 'utf-8')
   }
 }
