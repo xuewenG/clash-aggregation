@@ -1,5 +1,5 @@
 import { Controller, All } from '@ixuewen/express-util'
-import { queryList } from '@ixuewen/mysql-util'
+import { queryList, queryOne } from '@ixuewen/mysql-util'
 import { Request, Response } from 'express'
 import fetch from 'node-fetch'
 import YAML from 'yaml'
@@ -90,13 +90,13 @@ const getSubscribeList = async (userId: number): Promise<Subscribe[]> => {
   return Promise.resolve([])
 }
 
-const getUserList = async (): Promise<User[]> => {
+const getUserByToken = async (token: string): Promise<User | null> => {
   try {
-    return await queryList('select * from user')
+    return await queryOne('select * from user where token = ?', token)
   } catch (err) {
     console.error(err)
   }
-  return Promise.resolve([])
+  return Promise.resolve(null)
 }
 
 const getBaseConfig = (): BaseConfig => {
@@ -212,13 +212,12 @@ export class SubscribeController {
     }
 
     const token = req.query.token
-    if (!token) {
+    if (!token || typeof token !== 'string') {
       resp.end(YAML.stringify(result), 'utf-8')
       return
     }
 
-    const userList = await getUserList()
-    const currentUser = userList.find(user => user.token === token)
+    const currentUser = await getUserByToken(token)
     if (!currentUser) {
       resp.end(YAML.stringify(result), 'utf-8')
       return
