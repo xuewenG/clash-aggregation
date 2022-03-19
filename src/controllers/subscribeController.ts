@@ -53,17 +53,25 @@ interface ApiJson {
 }
 
 interface User {
+  id: number
   name: string
   token: string
 }
 
 interface Subscribe {
+  id: number
   name: string
   url: string
 }
 
-const getSubscribeList = async (): Promise<Subscribe[]> => {
-  const subscribeList: Subscribe[] = await queryList('select * from subscribe')
+const getSubscribeList = async (userId: number): Promise<Subscribe[]> => {
+  const subscribeList: Subscribe[] = await queryList(
+    `SELECT * 
+      FROM subscribe 
+      WHERE
+        id IN ( SELECT subscribeId AS id FROM userSubscribe WHERE userId = ? );`,
+    userId
+  )
   return subscribeList
 }
 
@@ -85,8 +93,10 @@ const getBaseConfig = () => {
   }
 }
 
-const getApiJsonList = async (): Promise<ApiJson[]> => {
-  const apiList = (await getSubscribeList()).map(subscribe => subscribe.url)
+const getApiJsonList = async (userId: number): Promise<ApiJson[]> => {
+  const apiList = (await getSubscribeList(userId)).map(
+    subscribe => subscribe.url
+  )
   const apiRequestList = apiList.map(api =>
     fetch(api, {
       headers: {
@@ -180,7 +190,7 @@ export class SubscribeController {
       resp.end()
       return
     }
-    const apiJsonList = await getApiJsonList()
+    const apiJsonList = await getApiJsonList(currentUser.id)
     const proxyList = getProxyList(apiJsonList)
     const proxyGroupList = getProxyGroupList(proxyList)
     const rules = getRuleList()
