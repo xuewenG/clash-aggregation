@@ -136,11 +136,11 @@ const getApiJsonList = async (userId: number): Promise<ApiJson[]> => {
   return apiJsonList
 }
 
-const getProxyList = (apiJsonList: ApiJson[]): ProxyServer[] => {
+const getProxyServerList = (apiJsonList: ApiJson[]): ProxyServer[] => {
   return apiJsonList
-    .map(apiJson => apiJson.proxies)
+    .map(apiJson => apiJson.proxies || [])
     .flat(1)
-    .filter(proxy => proxy.type === ProxyServerType.VMESS)
+    .filter(proxy => proxy && proxy.type === ProxyServerType.VMESS)
 }
 
 const getProxyGroupList = (proxyList: ProxyServer[]): ProxyGroup[] => {
@@ -224,7 +224,7 @@ export class SubscribeController {
     }
 
     const apiJsonList = await getApiJsonList(currentUser.id)
-    const proxyList = getProxyList(apiJsonList)
+    const proxyList = getProxyServerList(apiJsonList)
     const proxyGroupList = getProxyGroupList(proxyList)
     const rules = getRuleList()
 
