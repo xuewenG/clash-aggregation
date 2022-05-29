@@ -78,10 +78,14 @@ interface Subscribe {
 const getSubscribeList = async (userId: number): Promise<Subscribe[]> => {
   try {
     return await queryList(
-      `SELECT * 
-      FROM subscribe 
-      WHERE
-        id IN ( SELECT subscribeId AS id FROM userSubscribe WHERE userId = ? );`,
+      `
+        SELECT
+          *
+        FROM
+          subscribe
+        WHERE
+          id IN ( SELECT subscribeId AS id FROM userSubscribe WHERE userId = ? );
+      `,
       userId
     )
   } catch (err) {
@@ -92,7 +96,7 @@ const getSubscribeList = async (userId: number): Promise<Subscribe[]> => {
 
 const getUserByToken = async (token: string): Promise<User | null> => {
   try {
-    return await queryOne('select * from user where token = ?', token)
+    return await queryOne('SELECT * FROM user WHERE token = ?', token)
   } catch (err) {
     console.error(err)
   }
@@ -112,28 +116,87 @@ const getBaseConfig = (): BaseConfig => {
   }
 }
 
-const getApiJsonList = async (userId: number): Promise<ApiJson[]> => {
-  const apiList = (await getSubscribeList(userId)).map(
+type SubscribFetcher = (ignoreCache?: boolean) => Promise<string>
+
+const subscribeFetcherFactory = (() => {
+  const REFRESH_TIMEOUT = 1 * 60 * 60 * 1000
+  const FETCHER_REMOVE_TIMEOUT = 7 * 24 * 60 * 60 * 1000
+
+  const fetcherMap = new Map<string, SubscribFetcher>()
+  return (subscribeUrl: string) => {
+    let fetcher: SubscribFetcher | undefined = fetcherMap.get(subscribeUrl)
+    if (!fetcher) {
+      let textPromise: Promise<string> | null = null
+      let refreshTimer: NodeJS.Timer | null = null
+      fetcher = async (ignoreCache = false) => {
+        let text = ''
+        if (textPromise) {
+          text = await textPromise
+        }
+        if (!text || !textPromise || ignoreCache) {
+          textPromise = fetch(subscribeUrl, {
+            headers: {
+              'user-agent': 'ClashX/1.20.4.1'
+            },
+            method: 'GET'
+          })
+            .then(resp => resp.text())
+            .catch(err => {
+              console.error(err)
+              return ''
+            })
+          if (!refreshTimer) {
+            refreshTimer = setTimeout(() => {
+              refreshTimer = null
+              const fetcher = fetcherMap.get(subscribeUrl)
+              if (fetcher) {
+                fetcher(true)
+              }
+            }, REFRESH_TIMEOUT)
+          }
+        }
+        return textPromise
+      }
+      fetcherMap.set(subscribeUrl, fetcher)
+      setTimeout(() => {
+        fetcherMap.delete(subscribeUrl)
+        if (refreshTimer) {
+          clearTimeout(refreshTimer)
+        }
+      }, FETCHER_REMOVE_TIMEOUT)
+    }
+    return fetcher
+  }
+})()
+
+const getSubscribeContentList = async (userId: number): Promise<ApiJson[]> => {
+  const subscribeUrlList = (await getSubscribeList(userId)).map(
     subscribe => subscribe.url
   )
-  const apiRequestList = apiList.map(api =>
-    fetch(api, {
-      headers: {
-        'user-agent': 'ClashX/1.20.4.1'
-      },
-      method: 'GET'
-    }).catch(err => {
-      console.error(err)
-      return null
+  const textList = subscribeUrlList.map(subscribeUrl =>
+    subscribeFetcherFactory(subscribeUrl)()
+  )
+  const jsonList: ApiJson[] = (await Promise.all(textList))
+    .map(content => {
+      let json: ApiJson = {
+        proxies: [],
+        rules: []
+      }
+      try {
+        json = YAML.parse(content)
+      } catch (err) {
+        console.error(err)
+      }
+      if (!json.proxies) {
+        json.proxies = []
+      }
+      if (!json.rules) {
+        json.rules = []
+      }
+      return json
     })
-  )
-  const apiContentList = (await Promise.all(apiRequestList)).map(
-    request => (request && request.text()) || ''
-  )
-  const apiJsonList: ApiJson[] = (await Promise.all(apiContentList))
-    .map(content => YAML.parse(content))
     .filter(json => json)
-  return apiJsonList
+  return jsonList
 }
 
 const getProxyServerList = (apiJsonList: ApiJson[]): ProxyServer[] => {
@@ -223,7 +286,7 @@ export class SubscribeController {
       return
     }
 
-    const apiJsonList = await getApiJsonList(currentUser.id)
+    const apiJsonList = await getSubscribeContentList(currentUser.id)
     const proxyList = getProxyServerList(apiJsonList)
     const proxyGroupList = getProxyGroupList(proxyList)
     const rules = getRuleList()
