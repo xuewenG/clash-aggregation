@@ -112,7 +112,7 @@ const getBaseConfig = (): BaseConfig => {
     mode: 'rule',
     'log-level': 'info',
     ipv6: true,
-    'external-controller': '127.0.0.1:9090'
+    'external-controller': '127.0.0.1:10805'
   }
 }
 
