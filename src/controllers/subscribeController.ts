@@ -203,7 +203,7 @@ const getProxyServerList = (apiJsonList: ApiJson[]): ProxyServer[] => {
   return apiJsonList
     .map(apiJson => apiJson.proxies || [])
     .flat(1)
-    .filter(proxy => proxy && proxy.type === ProxyServerType.VMESS)
+    .filter(proxy => proxy)
 }
 
 const getProxyGroupList = (proxyList: ProxyServer[]): ProxyGroup[] => {
